@@ -5,9 +5,56 @@ on:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-and-healthcheck:
+  quality:
+    name: Quality checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Static syntax check
+        run: python -m py_compile app.py
+
+      - name: Endpoint smoke checks (Flask test client)
+        run: |
+          python - <<'PY'
+          from app import app
+
+          client = app.test_client()
+
+          root = client.get("/")
+          assert root.status_code == 200, root.status_code
+          assert root.get_json()["message"] == "Hello from dockerfile-hello"
+
+          health = client.get("/health")
+          assert health.status_code == 200, health.status_code
+          assert health.get_json()["status"] == "ok"
+
+          print("App smoke checks passed")
+          PY
+
+  docker:
+    name: Docker build and health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
     steps:
       - uses: actions/checkout@v4
 
@@ -19,8 +66,15 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 3
-          curl -fsS http://127.0.0.1:8000/health
+          for i in {1..10}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Health check failed"
+          exit 1
 
       - name: Cleanup
         if: always()
