@@ -7,7 +7,7 @@
 - `.dockerignore`: Keeps image builds fast by excluding unnecessary files.
 - `Makefile`: One-command shortcuts for build/run/test/stop.
 - `README.md`: Main project setup docs and command examples.
-- `.github/workflows/pipeline.yml`: CI checks for image build + health test.
+- `.github/workflows/pipeline.yml`: 2-stage CI (quality checks, then image build + health test).
 
 ## Project quick start
 - Build image: `make build`

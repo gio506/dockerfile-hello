@@ -11,9 +11,9 @@ A minimal Flask app containerized with Docker.
 .
 ├── .dockerignore              # Excludes unnecessary files from docker build context
 ├── .github/workflows/
-│   └── pipeline.yml           # CI pipeline: build image, run container, curl /health
+│   └── pipeline.yml           # 2-stage CI: quality checks, then Docker build + health check
 ├── app.py                     # Minimal Flask app with / and /health endpoints
-├── Dockerfile                 # Image definition with runtime healthcheck
+├── Dockerfile                 # Multi-stage image (builder + runtime) with healthcheck
 ├── Makefile                   # Local commands: build, run, test, stop
 ├── README.md                  # Setup and usage instructions
 ├── requirements.txt           # Python dependency list
@@ -38,7 +38,6 @@ make test
 ```
 
 ## CI pipeline
-The pipeline is in `.github/workflows/pipeline.yml` and does:
-1. Build the Docker image
-2. Run the container
-3. Curl `http://127.0.0.1:8000/health`
+The pipeline is in `.github/workflows/pipeline.yml` and has two jobs (stages):
+1. **Quality checks**: Python syntax validation and endpoint smoke tests via Flask test client
+2. **Docker**: Build image, run container, and verify `http://127.0.0.1:8000/health` with retry logic
