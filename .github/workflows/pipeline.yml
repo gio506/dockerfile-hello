@@ -1,0 +1,27 @@
+name: pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build-and-healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t dockerfile-hello:ci .
+
+      - name: Run container
+        run: docker run -d --rm -p 8000:8000 --name dockerfile-hello-ci dockerfile-hello:ci
+
+      - name: Health check
+        run: |
+          sleep 3
+          curl -fsS http://127.0.0.1:8000/health
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f dockerfile-hello-ci
