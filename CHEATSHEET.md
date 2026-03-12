@@ -3,7 +3,9 @@
 ## Quick project commands
 - Build image: `make build`
 - Run app: `make run`
-- Smoke test (`/health` + `/version`): `make test`
+- Full test suite: `make test`
+- App-only tests: `make test-app`
+- Docker smoke tests only: `make test-docker`
 - Cleanup container/image: `make clean`
 
 ## Core Docker commands

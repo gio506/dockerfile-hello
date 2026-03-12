@@ -33,16 +33,13 @@ jobs:
       - name: Python syntax lint
         run: python -m py_compile app.py
 
-      - name: Dockerfile lint (hadolint if available; fallback checks)
-        run: |
-          if command -v hadolint >/dev/null 2>&1; then
-            hadolint Dockerfile
-          else
-            grep -q '^FROM ' Dockerfile
-            grep -q '^USER ' Dockerfile
-            grep -q '^HEALTHCHECK ' Dockerfile
-            echo "hadolint not found; basic Dockerfile checks passed"
-          fi
+      - name: Unit tests
+        run: python -m unittest -v tests_app.py
+
+      - name: Dockerfile lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
 
   build:
     name: Build Docker image
@@ -55,6 +52,16 @@ jobs:
       - name: Build image
         run: docker build -t dockerfile-hello:ci .
 
+      - name: Export image artifact
+        run: docker save dockerfile-hello:ci -o dockerfile-hello-ci.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockerfile-hello-image
+          path: dockerfile-hello-ci.tar
+          retention-days: 1
+
   smoke:
     name: Container smoke test
     runs-on: ubuntu-latest
@@ -63,8 +70,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
-        run: docker build -t dockerfile-hello:ci .
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dockerfile-hello-image
+
+      - name: Load image
+        run: docker load -i dockerfile-hello-ci.tar
 
       - name: Run container
         run: docker run -d --rm -p 8000:8000 --name dockerfile-hello-ci dockerfile-hello:ci
@@ -98,6 +110,10 @@ jobs:
         run: docker build -t dockerfile-hello:scan .
 
       - name: Run Trivy scan (soft-fail)
-        run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 dockerfile-hello:scan || true
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: dockerfile-hello:scan
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: table
