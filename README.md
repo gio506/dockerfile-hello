@@ -50,12 +50,13 @@ Pipeline (`.github/workflows/pipeline.yml`) has 4 stages:
 1. **Lint and static checks** (including Dockerfile lint + unit tests)
 2. **Build Docker image**
 3. **Run container + curl smoke checks**
-4. **Optional Trivy scan** (non-blocking report)
+4. **Trivy security scan** (required check; non-blocking vulnerability report)
 
 For merge readiness, configure branch protection on `main` and mark these checks as required:
 - `Lint and static checks`
 - `Build Docker image`
 - `Container smoke test`
+- `Trivy security scan`
 
 ## Best-practice references
 - Docker: image-building best practices (multi-stage, small context, non-root where practical)
@@ -66,4 +67,4 @@ For merge readiness, configure branch protection on `main` and mark these checks
 - **Port already in use**: run `make clean` then retry.
 - **Docker daemon not running**: start Docker and rerun `make build`.
 - **Local env has no Docker CLI**: `make test` will still run app unit tests and skip container smoke.
-- **Trivy stage warns/fails**: scan is non-blocking by design; review output and remediate high/critical findings.
+- **Trivy security findings**: the stage must pass, but it reports vulnerabilities without failing the build; review output and remediate high/critical findings.
