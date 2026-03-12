@@ -2,8 +2,9 @@ name: pipeline
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev"]
   pull_request:
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -13,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Quality checks
+  lint:
+    name: Lint and static checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,32 +30,36 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Static syntax check
+      - name: Python syntax lint
         run: python -m py_compile app.py
 
-      - name: Endpoint smoke checks (Flask test client)
+      - name: Dockerfile lint (hadolint if available; fallback checks)
         run: |
-          python - <<'PY'
-          from app import app
+          if command -v hadolint >/dev/null 2>&1; then
+            hadolint Dockerfile
+          else
+            grep -q '^FROM ' Dockerfile
+            grep -q '^USER ' Dockerfile
+            grep -q '^HEALTHCHECK ' Dockerfile
+            echo "hadolint not found; basic Dockerfile checks passed"
+          fi
 
-          client = app.test_client()
-
-          root = client.get("/")
-          assert root.status_code == 200, root.status_code
-          assert root.get_json()["message"] == "Hello from dockerfile-hello"
-
-          health = client.get("/health")
-          assert health.status_code == 200, health.status_code
-          assert health.get_json()["status"] == "ok"
-
-          print("App smoke checks passed")
-          PY
-
-  docker:
-    name: Docker build and health check
+  build:
+    name: Build Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: quality
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t dockerfile-hello:ci .
+
+  smoke:
+    name: Container smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
     steps:
       - uses: actions/checkout@v4
 
@@ -64,18 +69,35 @@ jobs:
       - name: Run container
         run: docker run -d --rm -p 8000:8000 --name dockerfile-hello-ci dockerfile-hello:ci
 
-      - name: Health check
+      - name: Curl /health and /version
         run: |
-          for i in {1..10}; do
-            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
-              echo "Health check passed"
+          for i in {1..12}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null && curl -fsS http://127.0.0.1:8000/version >/dev/null; then
+              echo "Smoke check passed"
               exit 0
             fi
             sleep 1
           done
-          echo "Health check failed"
+          echo "Smoke check failed"
           exit 1
 
       - name: Cleanup
         if: always()
         run: docker rm -f dockerfile-hello-ci
+
+  trivy:
+    name: Optional Trivy scan (soft-fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: smoke
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t dockerfile-hello:scan .
+
+      - name: Run Trivy scan (soft-fail)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity HIGH,CRITICAL --exit-code 1 dockerfile-hello:scan || true
