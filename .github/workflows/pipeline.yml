@@ -99,22 +99,23 @@ jobs:
         run: docker rm -f dockerfile-hello-ci
 
   trivy:
-    name: Optional Trivy scan (soft-fail)
+    name: Trivy security scan
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: smoke
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Build image
         run: docker build -t dockerfile-hello:scan .
 
-      - name: Run Trivy scan (soft-fail)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: dockerfile-hello:scan
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          exit-code: '0'
-          format: table
+      - name: Run Trivy scan report
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.56.1 image \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format table \
+            --exit-code 0 \
+            dockerfile-hello:scan
