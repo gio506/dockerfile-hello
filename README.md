@@ -1,43 +1,56 @@
 # dockerfile-hello
 
-A minimal Flask app containerized with Docker.
+Secure minimal Flask app with Docker best practices and CI smoke checks.
 
 ## Endpoints
 - `GET /` → hello response
-- `GET /health` → health status for checks
+- `GET /health` → service health for probes
+- `GET /version` → app version (`APP_VERSION` env)
 
-## Project tree
-```text
-.
-├── .dockerignore              # Excludes unnecessary files from docker build context
-├── .github/workflows/
-│   └── pipeline.yml           # 2-stage CI: quality checks, then Docker build + health check
-├── app.py                     # Minimal Flask app with / and /health endpoints
-├── Dockerfile                 # Multi-stage image (builder + runtime) with healthcheck
-├── Makefile                   # Local commands: build, run, test, stop
-├── README.md                  # Setup and usage instructions
-├── requirements.txt           # Python dependency list
-└── CHEATSHEET.md              # Quick reference for what each file/command is for
-```
+## Repo Map
+- `app.py` - tiny Flask app and endpoints (`/`, `/health`, `/version`)
+- `requirements.txt` - Python dependencies
+- `Dockerfile` - multi-stage build, non-root runtime, healthcheck
+- `.dockerignore` - excludes unneeded local files from build context
+- `Makefile` - developer commands: `build`, `run`, `test`, `clean`
+- `.github/workflows/pipeline.yml` - CI pipeline: lint → build → smoke → optional Trivy
+- `CHEATSHEET.md` - day-to-day Docker command reference
+- `FILES_EXPLAINED.md` - concise explanation of every tracked project file
+- `README.md` - setup, run, CI, and troubleshooting
 
-## Build and run
+## Local Run
 ```bash
 make build
 make run
 ```
 
-Then open another terminal and test:
+In another terminal:
 ```bash
-curl http://127.0.0.1:8000/
-curl http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/version
 ```
 
-## Local test
+## Local Smoke Test
 ```bash
 make test
 ```
 
-## CI pipeline
-The pipeline is in `.github/workflows/pipeline.yml` and has two jobs (stages):
-1. **Quality checks**: Python syntax validation and endpoint smoke tests via Flask test client
-2. **Docker**: Build image, run container, and verify `http://127.0.0.1:8000/health` with retry logic
+## Cleanup
+```bash
+make clean
+```
+
+## CI Stages
+Pipeline (`.github/workflows/pipeline.yml`) has 4 stages:
+1. **Lint and static checks**
+2. **Build Docker image**
+3. **Run container + curl smoke checks**
+4. **Optional Trivy scan** (soft-fail)
+
+To enforce merge quality in GitHub, set these checks as **required** in branch protection for `main`.
+
+## Troubleshooting
+- **Port already in use**: run `make clean` then retry.
+- **Docker daemon not running**: start Docker Desktop/daemon and rerun `make build`.
+- **Health check fails immediately**: wait a few seconds and retry `make test`.
+- **Trivy stage warns/fails**: scan is soft-fail by design; review output and fix high/critical findings.
